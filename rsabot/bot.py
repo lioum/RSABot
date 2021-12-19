@@ -131,5 +131,6 @@ async def on_ready():
     print('Logged in as {0} ({0.id})'.format(bot.user))
     print('------')
 
-bot.add_cog(Music(bot))
-bot.run('token')
+if __name__ == "__main__":
+    bot.add_cog(Music(bot))
+    bot.run('token')
