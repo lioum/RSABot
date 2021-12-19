@@ -1,9 +1,14 @@
 import asyncio
+import logging
+import os
 
 import discord
 import youtube_dl
 
 from discord.ext import commands
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Suppress noise about console usage from errors
 youtube_dl.utils.bug_reports_message = lambda: ''
@@ -44,6 +49,9 @@ class YTDLSource(discord.PCMVolumeTransformer):
         loop = loop or asyncio.get_event_loop()
         data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
 
+        if data is None:
+            return
+
         if 'entries' in data:
             # take first item from a playlist
             data = data['entries'][0]
@@ -70,9 +78,9 @@ class Music(commands.Cog):
         """Plays a file from the local filesystem"""
 
         source = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(query))
-        ctx.voice_client.play(source, after=lambda e: print('Player error: %s' % e) if e else None)
+        ctx.voice_client.play(source, after=lambda e: logging.error(f'Player error: {e}') if e else None)
 
-        await ctx.send('Now playing: {}'.format(query))
+        await ctx.send(f'Now playing: {query}')
 
     @commands.command()
     async def yt(self, ctx, *, url):
@@ -80,9 +88,10 @@ class Music(commands.Cog):
 
         async with ctx.typing():
             player = await YTDLSource.from_url(url, loop=self.bot.loop)
-            ctx.voice_client.play(player, after=lambda e: print('Player error: %s' % e) if e else None)
+            ctx.voice_client.play(player, after=lambda e: logging.error(f'Player error: {e}') if e else None)
 
-        await ctx.send('Now playing: {}'.format(player.title))
+        if player:
+            await ctx.send(f'Now playing: {player.title}')
 
     @commands.command()
     async def stream(self, ctx, *, url):
@@ -90,9 +99,10 @@ class Music(commands.Cog):
 
         async with ctx.typing():
             player = await YTDLSource.from_url(url, loop=self.bot.loop, stream=True)
-            ctx.voice_client.play(player, after=lambda e: print('Player error: %s' % e) if e else None)
+            ctx.voice_client.play(player, after=lambda e: logging.error(f'Player error: {e}') if e else None)
 
-        await ctx.send('Now playing: {}'.format(player.title))
+        if player:
+            await ctx.send(f'Now playing: {player.title}')
 
     @commands.command()
     async def volume(self, ctx, volume: int):
@@ -102,7 +112,7 @@ class Music(commands.Cog):
             return await ctx.send("Not connected to a voice channel.")
 
         ctx.voice_client.source.volume = volume / 100
-        await ctx.send("Changed volume to {}%".format(volume))
+        await ctx.send(f"Changed volume to {volume}%")
 
     @commands.command()
     async def stop(self, ctx):
@@ -123,14 +133,20 @@ class Music(commands.Cog):
         elif ctx.voice_client.is_playing():
             ctx.voice_client.stop()
 
+
 bot = commands.Bot(command_prefix=commands.when_mentioned_or("!"),
                    description='Relatively simple music bot example')
 
 @bot.event
 async def on_ready():
-    print('Logged in as {0} ({0.id})'.format(bot.user))
-    print('------')
+    if bot.user:
+        logging.info(f'Logged in as {bot.user} ({bot.user.id})')
+
+
+def main():
+    bot.add_cog(Music(bot))
+    bot.run(os.getenv('DISCORD_TOKEN_BOT'))
+
 
 if __name__ == "__main__":
-    bot.add_cog(Music(bot))
-    bot.run('token')
+    main()
